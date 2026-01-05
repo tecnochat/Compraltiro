@@ -1,0 +1,29 @@
+dist/*
+node_modules/
+.env
+
+# Baileys auth
+*_sessions
+*tokens
+.wwebjs*
+baileys_auth/
+
+# Logs
+*.log
+
+# QR codes
+*qr.png
+
+# Chat history (user data)
+chat_history/
+
+# Temp files
+temp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
