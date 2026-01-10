@@ -18,6 +18,8 @@ class AIService {
         this.client = null  // Inicialización lazy
         this.model = 'meta-llama/llama-4-scout-17b-16e-instruct'
         this.settings = null
+        this.settingsLoadTime = null  // Cuándo se cargó settings
+        this.settingsTTL = 60 * 1000  // 1 minuto - recarga settings si expira
         this.maxTokens = 80
         this.temperature = 0.5
 
@@ -75,6 +77,9 @@ class AIService {
      */
     async loadSettings() {
         try {
+            // Invalidar caché de googleService para obtener datos frescos
+            googleService.invalidateCache()
+
             const prompts = await googleService.getPrompts()
 
             if (prompts.length > 0) {
@@ -95,6 +100,8 @@ class AIService {
                     }
                 }
 
+                // Registrar tiempo de carga
+                this.settingsLoadTime = Date.now()
                 console.log('🧠 Configuración IA cargada desde Sheets')
             }
         } catch (error) {
@@ -140,9 +147,14 @@ class AIService {
         console.log('🤖 [AI] Input:', userInput.substring(0, 50))
 
         try {
-            // Cargar configuración si no está cargada
-            if (!this.settings) {
-                console.log('🤖 [AI] Cargando settings...')
+            // Cargar configuración si no está cargada O si el caché expiró
+            const settingsExpired = this.settingsLoadTime &&
+                (Date.now() - this.settingsLoadTime) > this.settingsTTL
+
+            if (!this.settings || settingsExpired) {
+                if (settingsExpired) {
+                    console.log('🔄 [AI] Settings expirados, recargando desde Sheets...')
+                }
                 await this.loadSettings()
             }
 

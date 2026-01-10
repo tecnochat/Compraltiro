@@ -159,42 +159,80 @@ const voiceFlow = addKeyword(EVENTS.VOICE_NOTE)
         const phoneNumber = ctx.from
 
         console.log('🎙️ Mensaje de voz recibido de:', phoneNumber)
+        console.log('🎙️ CTX keys:', Object.keys(ctx))
+        console.log('🎙️ Message keys:', ctx.message ? Object.keys(ctx.message) : 'no message')
+
+        let transcribedText = ''
+        let buffer = null
 
         try {
-            // Enviar mensaje de "procesando"
-            await flowDynamic('🎙️ Procesando tu mensaje de voz...')
+            // Método 1: downloadContentFromMessage (Baileys directo)
+            if (!transcribedText && ctx.message?.audioMessage) {
+                try {
+                    console.log('🎙️ Intentando downloadContentFromMessage...')
+                    const { downloadContentFromMessage } = await import('baileys')
+                    const stream = await downloadContentFromMessage(ctx.message.audioMessage, 'audio')
 
-            // Obtener el audio (Baileys proporciona el buffer o la ruta)
-            let transcribedText = ''
+                    const chunks = []
+                    for await (const chunk of stream) {
+                        chunks.push(chunk)
+                    }
+                    buffer = Buffer.concat(chunks)
 
-            // Intentar obtener el buffer del audio directamente
-            if (ctx.message?.audioMessage) {
-                // Descargar el audio usando el provider
-                const buffer = await provider.vendor.downloadMediaMessage(ctx.message)
-                if (buffer) {
-                    console.log(`🎙️ Audio descargado: ${Math.round(buffer.length / 1024)}KB`)
-                    transcribedText = await audioTranscriptionService.transcribeFromBuffer(buffer, 'audio.ogg')
+                    if (buffer && buffer.length > 0) {
+                        console.log(`🎙️ Audio descargado via downloadContentFromMessage: ${Math.round(buffer.length / 1024)}KB`)
+                        transcribedText = await audioTranscriptionService.transcribeFromBuffer(buffer, 'audio.ogg')
+                    }
+                } catch (dcErr) {
+                    console.log('⚠️ downloadContentFromMessage falló:', dcErr.message)
                 }
             }
 
-            // Fallback: intentar con ctx.body si es una URL
-            if (!transcribedText && ctx.body && ctx.body.startsWith('http')) {
-                transcribedText = await audioTranscriptionService.transcribeFromUrl(ctx.body)
+            // Método 2: downloadMediaMessage directo
+            if (!transcribedText && provider.vendor?.downloadMediaMessage) {
+                try {
+                    console.log('🎙️ Intentando downloadMediaMessage con vendor...')
+                    buffer = await provider.vendor.downloadMediaMessage(ctx.message)
+                    if (buffer) {
+                        console.log(`🎙️ Audio descargado: ${Math.round(buffer.length / 1024)}KB`)
+                        transcribedText = await audioTranscriptionService.transcribeFromBuffer(buffer, 'audio.ogg')
+                    }
+                } catch (dlErr) {
+                    console.log('⚠️ downloadMediaMessage falló:', dlErr.message)
+                }
             }
 
-            if (!transcribedText || transcribedText.trim() === '') {
+            // Método 3: saveFile de BuilderBot
+            if (!transcribedText && provider.saveFile && ctx.message) {
+                try {
+                    console.log('🎙️ Intentando método saveFile...')
+                    const filePath = await provider.saveFile(ctx, { path: './temp' })
+                    if (filePath) {
+                        console.log(`🎙️ Audio guardado en: ${filePath}`)
+                        transcribedText = await audioTranscriptionService.transcribeFromFile(filePath)
+                    }
+                } catch (saveErr) {
+                    console.log('⚠️ saveFile falló:', saveErr.message)
+                }
+            }
+
+        } catch (downloadError) {
+            console.error('❌ Error en descarga de audio:', downloadError.message)
+        }
+
+        // Enviar respuesta basada en resultado
+        try {
+            if (transcribedText && transcribedText.trim() !== '') {
+                console.log(`✅ Transcripción: "${transcribedText.substring(0, 100)}..."`)
+
+                // Procesar el texto transcrito como un mensaje normal
+                await processMessage(phoneNumber, transcribedText, flowDynamic)
+            } else {
                 console.log('⚠️ No se pudo transcribir el audio')
-                return await flowDynamic('No logré entender el audio. ¿Puedes intentar de nuevo o escribir tu mensaje?')
+                await flowDynamic('No logré entender el audio. ¿Puedes intentar de nuevo o escribir tu mensaje?')
             }
-
-            console.log(`✅ Transcripción: "${transcribedText.substring(0, 100)}..."`)
-
-            // Procesar el texto transcrito como un mensaje normal
-            await processMessage(phoneNumber, transcribedText, flowDynamic)
-
-        } catch (error) {
-            console.error('❌ Error procesando audio:', error.message)
-            await flowDynamic('Hubo un problema procesando el audio. Por favor, intenta de nuevo o escribe tu mensaje.')
+        } catch (responseError) {
+            console.error('❌ Error enviando respuesta:', responseError.message)
         }
     })
 

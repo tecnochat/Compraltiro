@@ -103,16 +103,22 @@ class AudioTranscriptionService {
                 throw new Error(`Archivo no encontrado: ${filePath}`)
             }
 
-            console.log(`🎙️ Transcribiendo archivo: ${filePath}`)
+            console.log(`🎙️ [transcribeFromFile] Inicio: ${filePath}`)
 
-            const transcription = await this.client.audio.transcriptions.create({
-                file: fs.createReadStream(filePath),
-                model: this.model,
-                language: 'es',
-                response_format: 'text'
-            })
+            // Leer el archivo como buffer
+            const audioBuffer = fs.readFileSync(filePath)
+            console.log(`🎙️ Buffer leído: ${Math.round(audioBuffer.length / 1024)}KB`)
 
-            console.log(`✅ Transcripción completada: "${transcription.substring(0, 50)}..."`)
+            // Usar transcribeFromBuffer que maneja la extensión correctamente
+            const transcription = await this.transcribeFromBuffer(audioBuffer, 'audio.ogg')
+
+            // Limpiar archivo temporal
+            try {
+                fs.unlinkSync(filePath)
+            } catch (e) {
+                // Ignorar
+            }
+
             return transcription
 
         } catch (error) {

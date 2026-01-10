@@ -25,7 +25,7 @@ class GoogleService {
             blacklist: null,
             lastUpdate: {}
         }
-        this.cacheTTL = 5 * 60 * 1000 // 5 minutos
+        this.cacheTTL = 1 * 60 * 1000 // 1 minuto (cambios se reflejan rápido)
     }
 
     /**
